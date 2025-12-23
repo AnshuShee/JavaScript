@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Attendance Checker</title>
+  <style>
+    :root{--bg:#f6f7fb;--card:#fff;--muted:#6b7280;--accent:#3b82f6}
+    body{font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background:var(--bg); margin:0;padding:24px;color:#111}
+    .container{max-width:960px;margin:0 auto}
+    .card{background:var(--card);border-radius:12px;padding:18px;box-shadow:0 6px 20px rgba(16,24,40,0.06)}
+    h1{margin:0 0 8px;font-size:20px}
+    p.lead{margin:0 0 18px;color:var(--muted);font-size:13px}
+    .grid{display:grid;gap:12px}
+    .cols-2{grid-template-columns:repeat(2,1fr)}
+    label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+    input[type="number"], input[type="date"], input[type="text"]{width:100%;padding:8px;border-radius:8px;border:1px solid #e6e9ef;font-size:14px}
+    .row{display:flex;gap:8px}
+    .small{font-size:13px;color:var(--muted)}
+    .btn{background:var(--accent);color:#fff;border:none;padding:8px 12px;border-radius:8px;cursor:pointer}
+    .btn.ghost{background:transparent;color:var(--accent);border:1px solid rgba(59,130,246,0.15)}
+    .result-grid{display:grid;gap:12px;margin-top:12px}
+    .result{border-radius:10px;padding:12px;border:1px solid #eef2ff;background:linear-gradient(180deg,#fff,#fbfdff)}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th,td{padding:6px;border-bottom:1px solid #f1f5f9;text-align:left}
+    details summary{cursor:pointer;color:var(--accent);font-size:13px}
+    footer{margin-top:18px;font-size:12px;color:var(--muted);text-align:center}
+    @media(max-width:720px){.cols-2{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>Attendance Checker</h1>
+      <p class="lead">Enter your current present/total sessions and session rules. It will calculate how many sessions & which date you reach your percentage targets.</p>
+
+      <div class="grid cols-2" style="margin-bottom:12px">
+        <div>
+          <label>Present sessions</label>
+          <input id="present" type="number" value="72" min="0">
+        </div>
+        <div>
+          <label>Total sessions</label>
+          <input id="total" type="number" value="113" min="1">
+        </div>
+
+        <div>
+          <label>Start date (first day you will attend)</label>
+          <input id="startDate" type="date" value="2025-11-27">
+        </div>
+        <div>
+          <label>Targets (%) comma separated</label>
+          <input id="targets" type="text" value="75,80,85,90">
+        </div>
+      </div>
+
+      <div class="grid cols-2" style="margin-bottom:12px">
+        <div>
+          <label>Mon–Fri sessions / day</label>
+          <input id="weekdaySessions" type="number" value="4" min="0">
+        </div>
+        <div>
+          <label>Saturday sessions / day</label>
+          <input id="satSessions" type="number" value="3" min="0">
+        </div>
+
+        <div>
+          <label>Sunday sessions / day</label>
+          <input id="sunSessions" type="number" value="0" min="0">
+        </div>
+
+        <div style="display:flex;align-items:flex-end;gap:8px">
+          <button class="btn" id="calcBtn">Calculate</button>
+          <button class="btn ghost" id="resetBtn" title="Reset to example">Reset</button>
+        </div>
+      </div>
+
+      <div id="currentBox" class="row" style="gap:18px;align-items:center;margin-bottom:14px">
+        <div class="small">Present: <strong id="curPresent">72</strong></div>
+        <div class="small">Total: <strong id="curTotal">113</strong></div>
+        <div class="small">Current %: <strong id="curPercent">64.00%</strong></div>
+      </div>
+
+      <div id="results" class="result-grid"></div>
+
+      <footer>Copy this file and open it locally — no internet required.</footer>
+    </div>
+  </div>
+
+<script>
+/* Attendance Checker (plain JS) */
+(function(){
+  const el = id => document.getElementById(id);
+  const presentIn = el('present');
+  const totalIn = el('total');
+  const startDateIn = el('startDate');
+  const weekdayIn = el('weekdaySessions');
+  const satIn = el('satSessions');
+  const sunIn = el('sunSessions');
+  const targetsIn = el('targets');
+  const calcBtn = el('calcBtn');
+  const resetBtn = el('resetBtn');
+  const resultsBox = el('results');
+  const curPresent = el('curPresent');
+  const curTotal = el('curTotal');
+  const curPercent = el('curPercent');
+
+  function parseDateInput(s){
+    // s format YYYY-MM-DD
+    const parts = s.split('-');
+    return new Date(Number(parts[0]), Number(parts[1])-1, Number(parts[2]));
+  }
+  function formatDate(d){
+    const dd = String(d.getDate()).padStart(2,'0');
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const yyyy = d.getFullYear();
+    const dow = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+    return dd+'-'+mm+'-'+yyyy+' ('+dow+')';
+  }
+  function daySessionsCount(date, wkSessions, satSessions, sunSessions){
+    const dow = date.getDay();
+    if(dow === 0) return Number(sunSessions);
+    if(dow === 6) return Number(satSessions);
+    return Number(wkSessions);
+  }
+
+  function sessionsNeededForTarget(present, total, targetPercent){
+    const p = targetPercent/100;
+    if(p === 1) return Infinity;
+    // n(1-p) = p*total - present
+    const numerator = p * total - present;
+    const denom = 1 - p;
+    const n = Math.ceil(numerator/denom);
+    return Math.max(0, n);
+  }
+
+  function computeReachDate(startDateStr, extraNeeded, wkSessions, satSessions, sunSessions){
+    if(extraNeeded <= 0) return parseDateInput(startDateStr);
+    let accumulated = 0;
+    let date = parseDateInput(startDateStr);
+    const maxIter = 100000;
+    let iter=0;
+    while(accumulated < extraNeeded && iter < maxIter){
+      const s = daySessionsCount(date, wkSessions, satSessions, sunSessions);
+      accumulated += s;
+      if(accumulated >= extraNeeded) break;
+      date.setDate(date.getDate()+1);
+      iter++;
+    }
+    return date;
+  }
+
+  function computeSchedule(startDateStr, extraNeeded, wkSessions, satSessions, sunSessions){
+    const rows = [];
+    let accumulated = 0;
+    let date = parseDateInput(startDateStr);
+    const maxIter = 100000;
+    let iter=0;
+    while(accumulated < extraNeeded && iter < maxIter){
+      const s = daySessionsCount(date, wkSessions, satSessions, sunSessions);
+      accumulated += s;
+      rows.push({ date: new Date(date), sessions: s, running: accumulated });
+      if(accumulated >= extraNeeded) break;
+      date.setDate(date.getDate()+1);
+      iter++;
+    }
+    return rows;
+  }
+
+  function exportCSV(rows, filename='attendance_schedule.csv'){
+    if(!rows || rows.length===0) return;
+    let header = 'Date,Day,Sessions,Running\\n';
+    const lines = rows.map(r=>{
+      const d = r.date;
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      const dd = String(d.getDate()).padStart(2,'0');
+      const day = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+      return `${yyyy}-${mm}-${dd},${day},${r.sessions},${r.running}`;
+    }).join('\\n');
+    const csv = header + lines;
+    const blob = new Blob([csv], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+    a.remove(); URL.revokeObjectURL(url);
+  }
+
+  function numberOr0(v){ const n = Number(v); return isNaN(n)?0:n; }
+
+  function render(){
+    const present = numberOr0(presentIn.value);
+    const total = Math.max(1, numberOr0(totalIn.value));
+    const startDate = startDateIn.value || '2025-11-27';
+    const wkSessions = numberOr0(weekdayIn.value);
+    const satSessions = numberOr0(satIn.value);
+    const sunSessions = numberOr0(sunIn.value);
+    const targetsText = (targetsIn.value || '75').split(',').map(t => Number(t.trim())).filter(x => !isNaN(x) && x>0 && x<=100);
+
+    curPresent.textContent = present;
+    curTotal.textContent = total;
+    curPercent.textContent = ((present/total)*100).toFixed(2) + '%';
+
+    resultsBox.innerHTML = '';
+    if(targetsText.length === 0){
+      resultsBox.innerHTML = '<div class="result">Enter at least one valid target percent (e.g. 75)</div>';
+      return;
+    }
+
+    targetsText.forEach(t => {
+      const extra = sessionsNeededForTarget(present, total, t);
+      const reachDate = (extra === Infinity) ? null : computeReachDate(startDate, extra, wkSessions, satSessions, sunSessions);
+      const schedule = (extra === Infinity) ? [] : computeSchedule(startDate, extra, wkSessions, satSessions, sunSessions);
+
+      const card = document.createElement('div');
+      card.className = 'result';
+
+      const title = document.createElement('div');
+      title.style.display='flex'; title.style.justifyContent='space-between'; title.style.alignItems='center';
+      title.innerHTML = `<div><div class="small">Target</div><div style="font-weight:700;font-size:18px">${t}%</div></div>
+                         <div style="text-align:right">
+                            <div class="small">Extra sessions needed</div>
+                            <div style="font-weight:600">${(extra===Infinity)?'—':extra}</div>
+                            <div class="small" style="margin-top:6px">Reach date</div>
+                            <div style="font-weight:600">${reachDate?formatDate(reachDate):'—'}</div>
+                         </div>`;
+      card.appendChild(title);
+
+      // schedule details
+      const details = document.createElement('details');
+      details.style.marginTop='8px';
+      const summary = document.createElement('summary');
+      summary.textContent = 'Show schedule (day-by-day)';
+      details.appendChild(summary);
+
+      const wrapper = document.createElement('div');
+      wrapper.style.marginTop='8px';
+      if(schedule.length === 0){
+        wrapper.innerHTML = '<div class="small">No schedule (target unreachable or already reached).</div>';
+      } else {
+        const tbl = document.createElement('table');
+        const thead = document.createElement('thead');
+        thead.innerHTML = '<tr><th>Date</th><th>Day</th><th>Sessions</th><th>Running</th></tr>';
+        tbl.appendChild(thead);
+        const tbody = document.createElement('tbody');
+        schedule.forEach(r=>{
+          const tr = document.createElement('tr');
+          const d = r.date;
+          tr.innerHTML = `<td>${formatDate(d)}</td><td>${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]}</td><td>${r.sessions}</td><td>${r.running}</td>`;
+          tbody.appendChild(tr);
+        });
+        tbl.appendChild(tbody);
+        wrapper.appendChild(tbl);
+
+        const btnRow = document.createElement('div');
+        btnRow.style.marginTop='8px';
+        const csvBtn = document.createElement('button');
+        csvBtn.className='btn'; csvBtn.textContent='Export CSV';
+        csvBtn.onclick = ()=> exportCSV(schedule, `schedule_${t}.csv`);
+        btnRow.appendChild(csvBtn);
+        wrapper.appendChild(btnRow);
+      }
+      details.appendChild(wrapper);
+      card.appendChild(details);
+
+      resultsBox.appendChild(card);
+    });
+  }
+
+  calcBtn.addEventListener('click', render);
+  resetBtn.addEventListener('click', ()=>{
+    presentIn.value = 72; totalIn.value = 113; startDateIn.value='2025-11-27';
+    weekdayIn.value=4; satIn.value=3; sunIn.value=0; targetsIn.value = '75,80,85,90';
+    render();
+  });
+
+  // initial render
+  render();
+})();
+</script>
+</body>
+</html>
