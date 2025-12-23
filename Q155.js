@@ -1,8 +1,15 @@
-function repeat(str){
-let res="";
-for(let i=0;i<str.length;i++){
-res=res+str[i]+str[i];
+let str = "Hello";
+let isValid = true;
+
+for (let i = 0; i < str.length; i++) {
+  let ch = str[i];
+
+  if (
+    !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z'))
+  ) {
+    isValid = false;
+    break;
+  }
 }
-console.log(res);
-}
-repeat("Hello")
+
+console.log(isValid);
