@@ -9,7 +9,7 @@ for (let i = 0; i < words.length; i++) {
 }
 console.log(count);
 
-let sentence = "I love JavaScript coding";
+let sentence = "I know JavaScript";
 let count1 = 0;
 let wordLength = 0;
 
