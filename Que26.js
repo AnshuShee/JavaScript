@@ -1,4 +1,4 @@
-//Prime Number:
+// Prime Number:
 
 // let n=10;
 // while(n>=2){
